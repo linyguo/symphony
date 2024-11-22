@@ -1047,10 +1047,10 @@ func TestTargetUpSertWithStateOnly(t *testing.T) {
 }
 
 func TestTargetUpdateSummaryJobId(t *testing.T) {
-	testK8s := os.Getenv("TEST_K8S_STATE")
-	if testK8s == "" {
-		t.Skip("Skipping because TEST_K8S_STATE enviornment variable is not set")
-	}
+	// testK8s := os.Getenv("TEST_K8S_STATE")
+	// if testK8s == "" {
+	// 	t.Skip("Skipping because TEST_K8S_STATE enviornment variable is not set")
+	// }
 	err := checkTargetCRDApplied()
 	assert.Nil(t, err)
 	provider := K8sStateProvider{}
@@ -1141,6 +1141,7 @@ func TestTargetUpdateSummaryJobId(t *testing.T) {
 	assert.True(t, ok)
 	metadata, ok := object["metadata"].(model.ObjectMeta)
 	assert.True(t, ok)
+	fmt.Println("check annotations", metadata.Annotations)
 	assert.Equal(t, "2", metadata.Annotations[constants.SummaryJobIdKey])
 
 	err = provider.Delete(context.Background(), states.DeleteRequest{
