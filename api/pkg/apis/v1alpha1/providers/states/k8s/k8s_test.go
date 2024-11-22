@@ -1141,7 +1141,9 @@ func TestTargetUpdateSummaryJobId(t *testing.T) {
 	assert.True(t, ok)
 	metadata, ok := object["metadata"].(model.ObjectMeta)
 	assert.True(t, ok)
-	fmt.Println("check annotations", metadata.Annotations)
+	sLog.DebugfCtx(context.Background(), "XXXXXXX  item.Body %v", item.Body)
+	sLog.DebugfCtx(context.Background(), "XXXXXXX  object %v", object)
+	sLog.DebugfCtx(context.Background(), "XXXXXXX  metadata %v", metadata)
 	assert.Equal(t, "2", metadata.Annotations[constants.SummaryJobIdKey])
 
 	err = provider.Delete(context.Background(), states.DeleteRequest{
