@@ -1142,11 +1142,11 @@ func TestTargetUpdateSummaryJobId(t *testing.T) {
 	metadata, ok := object["metadata"].(model.ObjectMeta)
 	assert.True(t, ok)
 	sLog.DebugfCtx(context.Background(), "XXXXXXX  item.Body %v", item.Body)
-	fmt.Println("XXXXXXX  item.Body %v", item.Body)
+	fmt.Printf("XXXXXXX  item.Body %v", item.Body)
 	sLog.DebugfCtx(context.Background(), "XXXXXXX  object %v", object)
-	fmt.Println("XXXXXXX  object %v", object)
+	fmt.Printf("XXXXXXX  object %v", object)
 	sLog.DebugfCtx(context.Background(), "XXXXXXX  metadata %v", metadata)
-	fmt.Println("XXXXXXX  metadata %v", metadata)
+	fmt.Printf("XXXXXXX  metadata %v", metadata)
 	assert.Equal(t, "2", metadata.Annotations[constants.SummaryJobIdKey])
 
 	err = provider.Delete(context.Background(), states.DeleteRequest{
