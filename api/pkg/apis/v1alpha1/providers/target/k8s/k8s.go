@@ -445,29 +445,36 @@ func (i *K8sTargetProvider) pollCheck(ctx context.Context, isDelete bool, pollFu
 	}
 
 	waitErr := wait.PollUntilContextTimeout(ctx, pollInterval, timeoutDuration, true, func(ctx context.Context) (bool, error) {
-		err := pollFunc()
-		if err != nil && !k8s_errors.IsNotFound(err) {
-			log.ErrorfCtx(ctx, "P (K8s Target): Error while checking deletion: %v", err)
+		select {
+		case <-ctx.Done():
+			// Context canceled or timed out
+			log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+			err = utils.NewAPIError(v1alpha2.Canceled, "Reconciliation was canceled.")
 			return false, err
-		}
+		default:
+			err := pollFunc()
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				log.ErrorfCtx(ctx, "P (K8s Target): Error while checking deletion: %v", err)
+				return false, err
+			}
 
-		if isDelete {
-			if err != nil {
-				log.DebugfCtx(ctx, "P (K8s Target): has been deleted.")
+			if isDelete {
+				if err != nil {
+					log.DebugfCtx(ctx, "P (K8s Target): has been deleted.")
+					return true, nil
+				}
+				log.DebugfCtx(ctx, "P (K8s Target): Waiting for to be deleted...")
+				return false, nil
+
+			} else {
+				if err != nil {
+					log.DebugfCtx(ctx, "P (K8s Target):  Waiting for to be created...")
+					return false, nil
+				}
+				log.DebugfCtx(ctx, "P (K8s Target): has been created.")
 				return true, nil
 			}
-			log.DebugfCtx(ctx, "P (K8s Target): Waiting for to be deleted...")
-			return false, nil
-
-		} else {
-			if err != nil {
-				log.DebugfCtx(ctx, "P (K8s Target):  Waiting for to be created...")
-				return false, nil
-			}
-			log.DebugfCtx(ctx, "P (K8s Target): has been created.")
-			return true, nil
 		}
-
 	})
 	return waitErr
 }
@@ -599,6 +606,7 @@ func (i *K8sTargetProvider) removeNamespace(ctx context.Context, namespace strin
 	}
 	return nil
 }
+
 func (i *K8sTargetProvider) createNamespace(ctx context.Context, namespace string) error {
 	ctx, span := observability.StartSpan("K8s Target Provider", ctx, &map[string]string{
 		"method": "createNamespace",
@@ -611,25 +619,35 @@ func (i *K8sTargetProvider) createNamespace(ctx context.Context, namespace strin
 	if namespace == "" || namespace == "default" {
 		return nil
 	}
-	_, err = i.Client.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Start to create namespace - %s", namespace)
-			_, err = i.Client.CoreV1().Namespaces().Create(ctx, &apiv1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: namespace,
-				},
-			}, metav1.CreateOptions{})
-			if err != nil {
+	select {
+	case <-ctx.Done():
+		// Context canceled or timed out
+		log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+		err = utils.NewAPIError(v1alpha2.Canceled, "Reconciliation was canceled.")
+		return err
+	default:
+		_, err = i.Client.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Start to create namespace - %s", namespace)
+				_, err = i.Client.CoreV1().Namespaces().Create(ctx, &apiv1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: namespace,
+					},
+				}, metav1.CreateOptions{})
+				if err != nil {
+					return err
+				}
+			} else {
 				return err
 			}
-		} else {
-			return err
 		}
+		return nil
 	}
-	return nil
 }
+
 func (i *K8sTargetProvider) upsertDeployment(ctx context.Context, namespace string, name string, deployment *v1.Deployment) error {
 	ctx, span := observability.StartSpan("K8s Target Provider", ctx, &map[string]string{
 		"method": "upsertDeployment",
@@ -643,54 +661,63 @@ func (i *K8sTargetProvider) upsertDeployment(ctx context.Context, namespace stri
 		namespace = "default"
 	}
 
-	existing, err := i.Client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil && !k8s_errors.IsNotFound(err) {
+	select {
+	case <-ctx.Done():
+		// Context canceled or timed out
+		log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+		err = utils.NewAPIError(v1alpha2.UpdateFailed, "Reconciliation was canceled.")
 		return err
-	}
+	default:
+		existing, err := i.Client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
 
-	if k8s_errors.IsNotFound(err) || existing.DeletionTimestamp != nil { // not found or in deleting
-		observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting create deployment under namespace - %s, name - %s", namespace, name)
-		_, err = i.Client.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
-	} else {
-		deployment.ResourceVersion = existing.ResourceVersion
-		observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting update deployment under namespace - %s, name - %s", namespace, name)
-		_, err = i.Client.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
-	}
-	if err != nil {
-		return err
-	}
-
-	waitErr := i.pollCheck(ctx, false, func() error {
-		d, err := i.Client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if k8s_errors.IsNotFound(err) || existing.DeletionTimestamp != nil { // not found or in deleting
+			observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting create deployment under namespace - %s, name - %s", namespace, name)
+			_, err = i.Client.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
+		} else {
+			deployment.ResourceVersion = existing.ResourceVersion
+			observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting update deployment under namespace - %s, name - %s", namespace, name)
+			_, err = i.Client.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+		}
 		if err != nil {
 			return err
 		}
-		// If paused deployment will never be ready
-		if d.Spec.Paused {
-			return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
+
+		waitErr := i.pollCheck(ctx, false, func() error {
+			d, err := i.Client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			// If paused deployment will never be ready
+			if d.Spec.Paused {
+				return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
+			}
+			// Find RS associated with deployment
+			newReplicaSet, err := GetNewReplicaSet(d, i.Client.AppsV1())
+			if err != nil || newReplicaSet == nil {
+				return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
+			}
+			if !DeploymentReady(log, ctx, newReplicaSet, d) {
+				return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
+			}
+			return nil
+		})
+
+		if waitErr != nil {
+			if waitErr == context.DeadlineExceeded {
+				log.ErrorfCtx(ctx, " P (K8s Target): Timeout waiting for deployment %s in namespace %s to be ready.", name, namespace)
+			} else {
+				log.ErrorfCtx(ctx, " P (K8s Target): Error while waiting for deployment to be ready: %v", waitErr)
+			}
+			return waitErr
 		}
-		// Find RS associated with deployment
-		newReplicaSet, err := GetNewReplicaSet(d, i.Client.AppsV1())
-		if err != nil || newReplicaSet == nil {
-			return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
-		}
-		if !DeploymentReady(log, ctx, newReplicaSet, d) {
-			return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("deployments").GroupResource(), name) // consider inprogress as not found
-		}
+
 		return nil
-	})
-
-	if waitErr != nil {
-		if waitErr == context.DeadlineExceeded {
-			log.ErrorfCtx(ctx, " P (K8s Target): Timeout waiting for deployment %s in namespace %s to be ready.", name, namespace)
-		} else {
-			log.ErrorfCtx(ctx, " P (K8s Target): Error while waiting for deployment to be ready: %v", waitErr)
-		}
-		return waitErr
 	}
-
-	return nil
 }
+
 func (i *K8sTargetProvider) upsertService(ctx context.Context, namespace string, name string, service *apiv1.Service) error {
 	ctx, span := observability.StartSpan("K8s Target Provider", ctx, &map[string]string{
 		"method": "upsertService",
@@ -704,58 +731,66 @@ func (i *K8sTargetProvider) upsertService(ctx context.Context, namespace string,
 		namespace = "default"
 	}
 
-	existing, err := i.Client.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil && !k8s_errors.IsNotFound(err) {
+	select {
+	case <-ctx.Done():
+		// Context canceled or timed out
+		log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+		err = utils.NewAPIError(v1alpha2.Canceled, "Reconciliation was canceled.")
 		return err
-	}
-	if k8s_errors.IsNotFound(err) || existing.DeletionTimestamp != nil {
-		observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting create service under namespace - %s, name - %s", namespace, name)
-		_, err = i.Client.CoreV1().Services(namespace).Create(ctx, service, metav1.CreateOptions{})
-	} else {
-		service.ResourceVersion = existing.ResourceVersion
-		observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting update service under namespace - %s, name - %s", namespace, name)
-		_, err = i.Client.CoreV1().Services(namespace).Update(ctx, service, metav1.UpdateOptions{})
-	}
-	if err != nil {
-		return err
-	}
-	waitErr := i.pollCheck(ctx, false, func() error {
-		s, err := i.Client.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+	default:
+		existing, err := i.Client.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
+		if k8s_errors.IsNotFound(err) || existing.DeletionTimestamp != nil {
+			observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting create service under namespace - %s, name - %s", namespace, name)
+			_, err = i.Client.CoreV1().Services(namespace).Create(ctx, service, metav1.CreateOptions{})
+		} else {
+			service.ResourceVersion = existing.ResourceVersion
+			observ_utils.EmitUserAuditsLogs(ctx, "  P (K8s Target): Starting update service under namespace - %s, name - %s", namespace, name)
+			_, err = i.Client.CoreV1().Services(namespace).Update(ctx, service, metav1.UpdateOptions{})
+		}
 		if err != nil {
 			return err
 		}
-		if s.Spec.Type == apiv1.ServiceTypeExternalName {
-			return nil
-		}
-
-		// Ensure that the service cluster IP is not empty
-		if s.Spec.ClusterIP == "" {
-			log.InfofCtx(ctx, "  P (K8s Target): Service does not have cluster IP address: %s/%s", s.GetNamespace(), s.GetName())
-			return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("services").GroupResource(), name) // consider inprogress as not found
-		}
-		// This checks if the service has a LoadBalancer and that balancer has an Ingress defined
-		if s.Spec.Type == apiv1.ServiceTypeLoadBalancer {
-			// do not wait when at least 1 external IP is set
-			if len(s.Spec.ExternalIPs) > 0 {
-				log.InfofCtx(ctx, "  P (K8s Target): Service %s/%s has external IP addresses (%v), marking as ready", s.GetNamespace(), s.GetName(), s.Spec.ExternalIPs)
+		waitErr := i.pollCheck(ctx, false, func() error {
+			s, err := i.Client.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if s.Spec.Type == apiv1.ServiceTypeExternalName {
 				return nil
 			}
-			if s.Status.LoadBalancer.Ingress == nil {
-				log.InfofCtx(ctx, "  P (K8s Target): Service does not have load balancer ingress IP address: %s/%s", s.GetNamespace(), s.GetName())
+
+			// Ensure that the service cluster IP is not empty
+			if s.Spec.ClusterIP == "" {
+				log.InfofCtx(ctx, "  P (K8s Target): Service does not have cluster IP address: %s/%s", s.GetNamespace(), s.GetName())
 				return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("services").GroupResource(), name) // consider inprogress as not found
 			}
+			// This checks if the service has a LoadBalancer and that balancer has an Ingress defined
+			if s.Spec.Type == apiv1.ServiceTypeLoadBalancer {
+				// do not wait when at least 1 external IP is set
+				if len(s.Spec.ExternalIPs) > 0 {
+					log.InfofCtx(ctx, "  P (K8s Target): Service %s/%s has external IP addresses (%v), marking as ready", s.GetNamespace(), s.GetName(), s.Spec.ExternalIPs)
+					return nil
+				}
+				if s.Status.LoadBalancer.Ingress == nil {
+					log.InfofCtx(ctx, "  P (K8s Target): Service does not have load balancer ingress IP address: %s/%s", s.GetNamespace(), s.GetName())
+					return k8s_errors.NewNotFound(v1.SchemeGroupVersion.WithResource("services").GroupResource(), name) // consider inprogress as not found
+				}
+			}
+			return nil
+		})
+		if waitErr != nil {
+			if waitErr == context.DeadlineExceeded {
+				log.ErrorfCtx(ctx, "Timeout waiting for service %s in namespace %s to be ready.", name, namespace)
+			} else {
+				log.ErrorfCtx(ctx, "Error while waiting for service to be ready: %v", waitErr)
+			}
+			return waitErr
 		}
 		return nil
-	})
-	if waitErr != nil {
-		if waitErr == context.DeadlineExceeded {
-			log.ErrorfCtx(ctx, "Timeout waiting for service %s in namespace %s to be ready.", name, namespace)
-		} else {
-			log.ErrorfCtx(ctx, "Error while waiting for service to be ready: %v", waitErr)
-		}
-		return waitErr
 	}
-	return nil
 }
 func (i *K8sTargetProvider) deployComponents(ctx context.Context, namespace string, name string, metadata map[string]string, components []model.ComponentSpec, projector IK8sProjector, instanceName string) error {
 	var err error = nil
@@ -765,51 +800,59 @@ func (i *K8sTargetProvider) deployComponents(ctx context.Context, namespace stri
 		namespace = "default"
 	}
 
-	deployment, err := componentsToDeployment(ctx, namespace, name, metadata, components, instanceName)
-	if projector != nil {
-		err = projector.ProjectDeployment(namespace, name, metadata, components, deployment)
+	select {
+	case <-ctx.Done():
+		// Context canceled or timed out
+		log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+		err = utils.NewAPIError(v1alpha2.Canceled, "Reconciliation was canceled.")
+		return err
+	default:
+		deployment, err := componentsToDeployment(ctx, namespace, name, metadata, components, instanceName)
+		if projector != nil {
+			err = projector.ProjectDeployment(namespace, name, metadata, components, deployment)
+			if err != nil {
+				log.DebugfCtx(ctx, "  P (K8s Target): failed to project deployment: %s", err.Error())
+				return err
+			}
+		}
 		if err != nil {
-			log.DebugfCtx(ctx, "  P (K8s Target): failed to project deployment: %s", err.Error())
+			log.DebugfCtx(ctx, "  P (K8s Target): failed to apply: %s", err.Error())
 			return err
 		}
-	}
-	if err != nil {
-		log.DebugfCtx(ctx, "  P (K8s Target): failed to apply: %s", err.Error())
-		return err
-	}
-	service, err := metadataToService(ctx, namespace, name, metadata)
-	if err != nil {
-		log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (convert): %s", err.Error())
-		return err
-	}
-	if projector != nil {
-		err = projector.ProjectService(namespace, name, metadata, service)
+		service, err := metadataToService(ctx, namespace, name, metadata)
 		if err != nil {
-			log.DebugfCtx(ctx, "  P (K8s Target): failed to project service: %s", err.Error())
+			log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (convert): %s", err.Error())
 			return err
 		}
-	}
+		if projector != nil {
+			err = projector.ProjectService(namespace, name, metadata, service)
+			if err != nil {
+				log.DebugfCtx(ctx, "  P (K8s Target): failed to project service: %s", err.Error())
+				return err
+			}
+		}
 
-	log.DebugCtx(ctx, "  P (K8s Target): creating namespace")
-	err = i.createNamespace(ctx, namespace)
-	if err != nil {
-		log.DebugfCtx(ctx, "  P (K8s Target): failed to create namespace: %s", err.Error())
-		return err
-	}
-
-	log.DebugCtx(ctx, "  P (K8s Target): creating deployment")
-	err = i.upsertDeployment(ctx, namespace, name, deployment)
-	if err != nil {
-		log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (API): %s", err.Error())
-		return err
-	}
-
-	if service != nil {
-		log.DebugCtx(ctx, "  P (K8s Target): creating service")
-		err = i.upsertService(ctx, namespace, service.Name, service)
+		log.DebugCtx(ctx, "  P (K8s Target): creating namespace")
+		err = i.createNamespace(ctx, namespace)
 		if err != nil {
-			log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (service): %s", err.Error())
+			log.DebugfCtx(ctx, "  P (K8s Target): failed to create namespace: %s", err.Error())
 			return err
+		}
+
+		log.DebugCtx(ctx, "  P (K8s Target): creating deployment")
+		err = i.upsertDeployment(ctx, namespace, name, deployment)
+		if err != nil {
+			log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (API): %s", err.Error())
+			return err
+		}
+
+		if service != nil {
+			log.DebugCtx(ctx, "  P (K8s Target): creating service")
+			err = i.upsertService(ctx, namespace, service.Name, service)
+			if err != nil {
+				log.DebugfCtx(ctx, "  P (K8s Target): failed to apply (service): %s", err.Error())
+				return err
+			}
 		}
 	}
 	return nil
@@ -838,6 +881,7 @@ func (i *K8sTargetProvider) GetValidationRule(ctx context.Context) model.Validat
 		},
 	}
 }
+
 func (i *K8sTargetProvider) Apply(ctx context.Context, dep model.DeploymentSpec, step model.DeploymentStep, isDryRun bool) (map[string]model.ComponentResultSpec, error) {
 	ctx, span := observability.StartSpan("K8s Target Provider", ctx, &map[string]string{
 		"method": "Apply",
@@ -879,94 +923,32 @@ func (i *K8sTargetProvider) Apply(ctx context.Context, dep model.DeploymentSpec,
 
 	ret := step.PrepareResultMap()
 
-	projector, err := createProjector(i.Config.Projector)
-	if err != nil {
-		log.DebugfCtx(ctx, "  P (K8s Target): failed to create projector: %s", err.Error())
-		err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to create projector", componentName), v1alpha2.CreateProjectorFailed)
-		providerOperationMetrics.ProviderOperationErrors(
-			k8s,
-			functionName,
-			metrics.K8SProjectorOperation,
-			metrics.ApplyOperationType,
-			v1alpha2.CreateProjectorFailed.String(),
-		)
+	select {
+	case <-ctx.Done():
+		// Context canceled or timed out
+		log.DebugfCtx(ctx, " P (K8s Target): reconcile canceled")
+		err = utils.NewAPIError(v1alpha2.Canceled, "Reconciliation was canceled.")
 		return ret, err
-	}
+	default:
+		projector, err := createProjector(i.Config.Projector)
+		if err != nil {
+			log.DebugfCtx(ctx, "  P (K8s Target): failed to create projector: %s", err.Error())
+			err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to create projector", componentName), v1alpha2.CreateProjectorFailed)
+			providerOperationMetrics.ProviderOperationErrors(
+				k8s,
+				functionName,
+				metrics.K8SProjectorOperation,
+				metrics.ApplyOperationType,
+				v1alpha2.CreateProjectorFailed.String(),
+			)
+			return ret, err
+		}
 
-	switch i.Config.DeploymentStrategy {
-	case "", SINGLE_POD:
-		updated := step.GetUpdatedComponents()
-		if len(updated) > 0 {
-			err = i.deployComponents(ctx, dep.Instance.Spec.Scope, dep.Instance.ObjectMeta.Name, dep.Instance.Spec.Metadata, components, projector, dep.Instance.ObjectMeta.Name)
-			if err != nil {
-				log.DebugfCtx(ctx, "  P (K8s Target): failed to apply components: %s", err.Error())
-				err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to deploy components", componentName), v1alpha2.K8sDeploymentFailed)
-				providerOperationMetrics.ProviderOperationErrors(
-					k8s,
-					functionName,
-					metrics.K8SDeploymentOperation,
-					metrics.ApplyOperationType,
-					v1alpha2.K8sDeploymentFailed.String(),
-				)
-				return ret, err
-			}
-		}
-		deleted := step.GetDeletedComponents()
-		if len(deleted) > 0 {
-			serviceName := dep.Instance.ObjectMeta.Name
-			if v, ok := dep.Instance.Spec.Metadata["service.name"]; ok && v != "" {
-				serviceName = v
-			}
-			err = i.removeService(ctx, dep.Instance.Spec.Scope, serviceName)
-			if err != nil {
-				log.DebugfCtx(ctx, "  P (K8s Target): failed to remove service: %s", err.Error())
-				err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s service", componentName), v1alpha2.K8sRemoveServiceFailed)
-				providerOperationMetrics.ProviderOperationErrors(
-					k8s,
-					functionName,
-					metrics.K8SRemoveServiceOperation,
-					metrics.ApplyOperationType,
-					v1alpha2.K8sRemoveServiceFailed.String(),
-				)
-				return ret, err
-			}
-			err = i.removeDeployment(ctx, dep.Instance.Spec.Scope, dep.Instance.ObjectMeta.Name)
-			if err != nil {
-				log.DebugfCtx(ctx, "  P (K8s Target): failed to remove deployment: %s", err.Error())
-				err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s deployment", componentName), v1alpha2.K8sRemoveDeploymentFailed)
-				providerOperationMetrics.ProviderOperationErrors(
-					k8s,
-					functionName,
-					metrics.K8SRemoveDeploymentOperation,
-					metrics.ApplyOperationType,
-					v1alpha2.K8sRemoveDeploymentFailed.String(),
-				)
-				return ret, err
-			}
-			if i.Config.DeleteEmptyNamespace {
-				err = i.removeNamespace(ctx, dep.Instance.Spec.Scope, i.Config.RetryCount, i.Config.RetryIntervalInSec)
-				if err != nil {
-					log.DebugfCtx(ctx, "  P (K8s Target): failed to remove namespace: %s", err.Error())
-				}
-			}
-		}
-	case SERVICES, SERVICES_NS:
-		updated := step.GetUpdatedComponents()
-		if len(updated) > 0 {
-			scope := dep.Instance.Spec.Scope
-			if i.Config.DeploymentStrategy == SERVICES_NS {
-				scope = dep.Instance.ObjectMeta.Name
-			}
-			for _, component := range components {
-				if dep.Instance.Spec.Metadata != nil {
-					if v, ok := dep.Instance.Spec.Metadata[ENV_NAME]; ok && v != "" {
-						if component.Metadata == nil {
-							component.Metadata = make(map[string]string)
-						}
-						component.Metadata[ENV_NAME] = v
-					}
-				}
-				err = i.deployComponents(ctx, scope, component.Name, component.Metadata, []model.ComponentSpec{component}, projector, dep.Instance.ObjectMeta.Name)
+		switch i.Config.DeploymentStrategy {
+		case "", SINGLE_POD:
+			updated := step.GetUpdatedComponents()
+			if len(updated) > 0 {
+				err = i.deployComponents(ctx, dep.Instance.Spec.Scope, dep.Instance.ObjectMeta.Name, dep.Instance.Spec.Metadata, components, projector, dep.Instance.ObjectMeta.Name)
 				if err != nil {
 					log.DebugfCtx(ctx, "  P (K8s Target): failed to apply components: %s", err.Error())
 					err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to deploy components", componentName), v1alpha2.K8sDeploymentFailed)
@@ -980,27 +962,15 @@ func (i *K8sTargetProvider) Apply(ctx context.Context, dep model.DeploymentSpec,
 					return ret, err
 				}
 			}
-		}
-		deleted := step.GetDeletedComponents()
-		if len(deleted) > 0 {
-			scope := dep.Instance.Spec.Scope
-			if i.Config.DeploymentStrategy == SERVICES_NS {
-				scope = dep.Instance.ObjectMeta.Name
-			}
-			for _, component := range deleted {
-				serviceName := component.Name
-				if component.Metadata != nil {
-					if v, ok := component.Metadata["service.name"]; ok {
-						serviceName = v
-					}
+			deleted := step.GetDeletedComponents()
+			if len(deleted) > 0 {
+				serviceName := dep.Instance.ObjectMeta.Name
+				if v, ok := dep.Instance.Spec.Metadata["service.name"]; ok && v != "" {
+					serviceName = v
 				}
-				err = i.removeService(ctx, scope, serviceName)
+				err = i.removeService(ctx, dep.Instance.Spec.Scope, serviceName)
 				if err != nil {
-					ret[component.Name] = model.ComponentResultSpec{
-						Status:  v1alpha2.DeleteFailed,
-						Message: err.Error(),
-					}
-					log.DebugfCtx(ctx, "P (K8s Target): failed to remove service: %s", err.Error())
+					log.DebugfCtx(ctx, "  P (K8s Target): failed to remove service: %s", err.Error())
 					err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s service", componentName), v1alpha2.K8sRemoveServiceFailed)
 					providerOperationMetrics.ProviderOperationErrors(
 						k8s,
@@ -1011,13 +981,9 @@ func (i *K8sTargetProvider) Apply(ctx context.Context, dep model.DeploymentSpec,
 					)
 					return ret, err
 				}
-				err = i.removeDeployment(ctx, scope, component.Name)
+				err = i.removeDeployment(ctx, dep.Instance.Spec.Scope, dep.Instance.ObjectMeta.Name)
 				if err != nil {
-					ret[component.Name] = model.ComponentResultSpec{
-						Status:  v1alpha2.DeleteFailed,
-						Message: err.Error(),
-					}
-					log.DebugfCtx(ctx, "P (K8s Target): failed to remove deployment: %s", err.Error())
+					log.DebugfCtx(ctx, "  P (K8s Target): failed to remove deployment: %s", err.Error())
 					err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s deployment", componentName), v1alpha2.K8sRemoveDeploymentFailed)
 					providerOperationMetrics.ProviderOperationErrors(
 						k8s,
@@ -1031,14 +997,100 @@ func (i *K8sTargetProvider) Apply(ctx context.Context, dep model.DeploymentSpec,
 				if i.Config.DeleteEmptyNamespace {
 					err = i.removeNamespace(ctx, dep.Instance.Spec.Scope, i.Config.RetryCount, i.Config.RetryIntervalInSec)
 					if err != nil {
-						log.DebugfCtx(ctx, "P (K8s Target): failed to remove namespace: %s", err.Error())
+						log.DebugfCtx(ctx, "  P (K8s Target): failed to remove namespace: %s", err.Error())
+					}
+				}
+			}
+		case SERVICES, SERVICES_NS:
+			updated := step.GetUpdatedComponents()
+			if len(updated) > 0 {
+				scope := dep.Instance.Spec.Scope
+				if i.Config.DeploymentStrategy == SERVICES_NS {
+					scope = dep.Instance.ObjectMeta.Name
+				}
+				for _, component := range components {
+					if dep.Instance.Spec.Metadata != nil {
+						if v, ok := dep.Instance.Spec.Metadata[ENV_NAME]; ok && v != "" {
+							if component.Metadata == nil {
+								component.Metadata = make(map[string]string)
+							}
+							component.Metadata[ENV_NAME] = v
+						}
+					}
+					err = i.deployComponents(ctx, scope, component.Name, component.Metadata, []model.ComponentSpec{component}, projector, dep.Instance.ObjectMeta.Name)
+					if err != nil {
+						log.DebugfCtx(ctx, "  P (K8s Target): failed to apply components: %s", err.Error())
+						err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to deploy components", componentName), v1alpha2.K8sDeploymentFailed)
+						providerOperationMetrics.ProviderOperationErrors(
+							k8s,
+							functionName,
+							metrics.K8SDeploymentOperation,
+							metrics.ApplyOperationType,
+							v1alpha2.K8sDeploymentFailed.String(),
+						)
+						return ret, err
+					}
+				}
+			}
+			deleted := step.GetDeletedComponents()
+			if len(deleted) > 0 {
+				scope := dep.Instance.Spec.Scope
+				if i.Config.DeploymentStrategy == SERVICES_NS {
+					scope = dep.Instance.ObjectMeta.Name
+				}
+				for _, component := range deleted {
+					serviceName := component.Name
+					if component.Metadata != nil {
+						if v, ok := component.Metadata["service.name"]; ok {
+							serviceName = v
+						}
+					}
+					err = i.removeService(ctx, scope, serviceName)
+					if err != nil {
+						ret[component.Name] = model.ComponentResultSpec{
+							Status:  v1alpha2.DeleteFailed,
+							Message: err.Error(),
+						}
+						log.DebugfCtx(ctx, "P (K8s Target): failed to remove service: %s", err.Error())
+						err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s service", componentName), v1alpha2.K8sRemoveServiceFailed)
+						providerOperationMetrics.ProviderOperationErrors(
+							k8s,
+							functionName,
+							metrics.K8SRemoveServiceOperation,
+							metrics.ApplyOperationType,
+							v1alpha2.K8sRemoveServiceFailed.String(),
+						)
+						return ret, err
+					}
+					err = i.removeDeployment(ctx, scope, component.Name)
+					if err != nil {
+						ret[component.Name] = model.ComponentResultSpec{
+							Status:  v1alpha2.DeleteFailed,
+							Message: err.Error(),
+						}
+						log.DebugfCtx(ctx, "P (K8s Target): failed to remove deployment: %s", err.Error())
+						err = v1alpha2.NewCOAError(err, fmt.Sprintf("%s: failed to remove k8s deployment", componentName), v1alpha2.K8sRemoveDeploymentFailed)
+						providerOperationMetrics.ProviderOperationErrors(
+							k8s,
+							functionName,
+							metrics.K8SRemoveDeploymentOperation,
+							metrics.ApplyOperationType,
+							v1alpha2.K8sRemoveDeploymentFailed.String(),
+						)
+						return ret, err
+					}
+					if i.Config.DeleteEmptyNamespace {
+						err = i.removeNamespace(ctx, dep.Instance.Spec.Scope, i.Config.RetryCount, i.Config.RetryIntervalInSec)
+						if err != nil {
+							log.DebugfCtx(ctx, "P (K8s Target): failed to remove namespace: %s", err.Error())
+						}
 					}
 				}
 			}
 		}
+		err = nil
+		return ret, nil
 	}
-	err = nil
-	return ret, nil
 }
 func deploymentToComponents(ctx context.Context, deployment v1.Deployment) ([]model.ComponentSpec, error) {
 	components := make([]model.ComponentSpec, 0)
