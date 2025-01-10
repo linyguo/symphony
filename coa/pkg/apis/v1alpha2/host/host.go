@@ -170,7 +170,7 @@ func (h *APIHost) Launch(config HostConfig,
 					if err != nil {
 						return err
 					}
-					for k, _ := range mProviders {
+					for k := range mProviders { // range over the keys
 						if _, ok := providers[k]; ok {
 							for ik, iv := range mProviders[k] {
 								if _, ok := providers[k][ik]; !ok {
@@ -201,6 +201,7 @@ func (h *APIHost) Launch(config HostConfig,
 			return v1alpha2.NewCOAError(nil, fmt.Sprintf("no vendor factories can provide vendor type '%s'", v.Type), v1alpha2.BadConfig)
 		}
 	}
+	time.Sleep(10 * time.Second)
 	if len(h.Vendors) == 0 {
 		return v1alpha2.NewCOAError(nil, "no vendors are found", v1alpha2.MissingConfig)
 	}

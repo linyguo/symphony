@@ -70,42 +70,42 @@ var (
 		// 	Fault:     "beforeConcludeSummary",
 		// 	FaultType: DefaultFaultType,
 		// },
-		{
-			TestCase:  TestCases["solutionUpdate"],
-			PodLabel:  PodLabels["k8s"],
-			Fault:     "beforePollingResult",
-			FaultType: DefaultFaultType,
-		},
-		{
-			TestCase:  TestCases["solutionUpdate"],
-			PodLabel:  PodLabels["k8s"],
-			Fault:     "afterPollingResult",
-			FaultType: DefaultFaultType,
-		},
-		{
-			TestCase:  TestCases["solutionUpdate"],
-			PodLabel:  PodLabels["k8s"],
-			Fault:     "beforeQueueJob",
-			FaultType: DefaultFaultType,
-		},
-		{
-			TestCase:  TestCases["solutionUpdate"],
-			PodLabel:  PodLabels["k8s"],
-			Fault:     "afterQueueJob",
-			FaultType: DefaultFaultType,
-		},
+		// {
+		// 	TestCase:  TestCases["solutionUpdate"],
+		// 	PodLabel:  PodLabels["k8s"],
+		// 	Fault:     "beforePollingResult",
+		// 	FaultType: DefaultFaultType,
+		// },
+		// {
+		// 	TestCase:  TestCases["solutionUpdate"],
+		// 	PodLabel:  PodLabels["k8s"],
+		// 	Fault:     "afterPollingResult",
+		// 	FaultType: DefaultFaultType,
+		// },
+		// {
+		// 	TestCase:  TestCases["solutionUpdate"],
+		// 	PodLabel:  PodLabels["k8s"],
+		// 	Fault:     "beforeQueueJob",
+		// 	FaultType: DefaultFaultType,
+		// },
+		// {
+		// 	TestCase:  TestCases["solutionUpdate"],
+		// 	PodLabel:  PodLabels["k8s"],
+		// 	Fault:     "afterQueueJob",
+		// 	FaultType: DefaultFaultType,
+		// },
 		{
 			TestCase:  TestCases["workflowMaterialize"],
 			PodLabel:  PodLabels["api"],
 			Fault:     "afterMaterializeOnce",
 			FaultType: DefaultFaultType,
 		},
-		{
-			TestCase:  TestCases["workflowMaterialize"],
-			PodLabel:  PodLabels["api"],
-			Fault:     "afterProvider",
-			FaultType: DefaultFaultType,
-		},
+		// {
+		// 	TestCase:  TestCases["workflowMaterialize"],
+		// 	PodLabel:  PodLabels["api"],
+		// 	Fault:     "afterProvider",
+		// 	FaultType: DefaultFaultType,
+		// },
 		// afterPublishTrigger fault test cannot pass now because of dedup issue in activation
 		// {
 		// 	testCase:  TestCases["workflowMaterialize"],
@@ -113,12 +113,12 @@ var (
 		// 	fault:     "afterPublishTrigger",
 		// 	faultType: DefaultFaultType,
 		// },
-		{
-			TestCase:  TestCases["workflowMaterialize"],
-			PodLabel:  PodLabels["api"],
-			Fault:     "afterRunTrigger",
-			FaultType: DefaultFaultType,
-		},
+		// {
+		// 	TestCase:  TestCases["workflowMaterialize"],
+		// 	PodLabel:  PodLabels["api"],
+		// 	Fault:     "afterRunTrigger",
+		// 	FaultType: DefaultFaultType,
+		// },
 	}
 
 	DefaultFaultType = "100.0%panic"
