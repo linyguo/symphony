@@ -16,6 +16,7 @@ import (
 	v1 "gopls-workspace/apis/model/v1"
 	"gopls-workspace/configutils"
 	"gopls-workspace/constants"
+	"gopls-workspace/history"
 	"gopls-workspace/utils/diagnostic"
 	"time"
 
@@ -44,6 +45,7 @@ var myInstanceClient client.Reader
 var instanceWebhookValidationMetrics *metrics.Metrics
 var instanceProjectConfig *configv1.ProjectConfig
 var instanceValidator validation.InstanceValidator
+var instanceHistory history.InstanceHistory
 
 func (r *Instance) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	myInstanceClient = mgr.GetAPIReader()
@@ -80,6 +82,22 @@ func (r *Instance) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	} else {
 		instanceValidator = validation.NewInstanceValidator(nil, solutionLookupFunc, targetLookupFunc)
 	}
+
+	saveInstanceHistoryFunc := func(ctx context.Context, objectName string, namespace string, object interface{}) error {
+		instance, ok := object.(*Instance)
+		if !ok {
+			err := fmt.Errorf("expected an Instance object")
+			diagnostic.ErrorWithCtx(instancelog, ctx, err, "failed to convert old object to Instance", "name", r.Name, "namespace", r.Namespace)
+			return err
+		}
+		currentTime := time.Now()
+		diagnostic.InfoWithCtx(instancelog, ctx, "Current time", currentTime, "Saving old instance history", "name", instance.Name, "instance", instance)
+		// var history InstanceHistory
+		// history.Spec = instance.Spec
+		// history.Status = instance.Status
+		return nil
+	}
+	instanceHistory = history.NewInstanceHistory(saveInstanceHistoryFunc)
 
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
@@ -166,6 +184,11 @@ func (r *Instance) ValidateUpdate(old runtime.Object) (admission.Warnings, error
 		diagnostic.ErrorWithCtx(instancelog, ctx, err, "failed to convert old object to Instance", "name", r.Name, "namespace", r.Namespace)
 		return nil, err
 	}
+
+	// Save the old object
+	diagnostic.InfoWithCtx(instancelog, ctx, "saving instance history", "oldInstance", oldInstance)
+	instanceHistory.SaveInstanceHistoryFunc(ctx, oldInstance.Name, oldInstance.Namespace, oldInstance)
+
 	validationError := r.validateUpdateInstance(ctx, oldInstance)
 	if validationError != nil {
 		instanceWebhookValidationMetrics.ControllerValidationLatency(

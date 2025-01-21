@@ -41,9 +41,12 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 )
 
 // Verify target has correct status
@@ -314,6 +317,106 @@ func TestBasic_VerifyPodUpdatedInNamespace(t *testing.T) {
 		} else {
 			fmt.Println("Pod is found.")
 			break
+		}
+	}
+}
+
+func TestK8sStateProviderGet(t *testing.T) {
+	cfg, err := testhelpers.RestConfig()
+	require.NoError(t, err)
+
+	dyn, err := dynamic.NewForConfig(cfg)
+
+	namespace := "default"
+	// name := "sample-prometheus-server-v-v1"
+	resourceVersion := "9131"
+
+	item, err := dyn.Resource(schema.GroupVersionResource{
+		Group:    "solution.symphony",
+		Version:  "v1",
+		Resource: "solutions",
+	}).Namespace(namespace).List(context.Background(), metav1.ListOptions{
+		ResourceVersion:      resourceVersion,
+		ResourceVersionMatch: "Exact",
+	})
+	// .Get(context.TODO(), name, metav1.GetOptions{
+	// 	ResourceVersion: resourceVersion,
+	// })
+	require.NoError(t, err)
+
+	fmt.Printf("Name: %+v\n", item)
+}
+
+func TestBasic_WatchInstanceChange(t *testing.T) {
+	cfg, err := testhelpers.RestConfig()
+	require.NoError(t, err)
+	dyn, err := dynamic.NewForConfig(cfg)
+	require.NoError(t, err)
+
+	gvr := schema.GroupVersionResource{
+		Group:    "solution.symphony",
+		Version:  "v1",
+		Resource: "instances",
+	}
+	require.NoError(t, err)
+	// Create an informer to watch the custom resource
+	informer := cache.NewSharedInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return dyn.Resource(gvr).Namespace("default").List(context.TODO(), options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return dyn.Resource(gvr).Namespace("default").Watch(context.TODO(), options)
+			},
+		},
+		&unstructured.Unstructured{},
+		0, // Skip resync
+	)
+
+	// Create a cache to store the history of the custom resource
+	store := informer.GetStore()
+
+	// Add event handlers to the informer
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			store.Add(obj)
+			fmt.Printf("\n=====\nAdded: %v\n\n", obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			fmt.Printf("\n=====\nOld: %v\n\n", oldObj)
+			store.Update(newObj)
+			fmt.Printf("\n=====\nUpdated: %v\n\n", newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			store.Delete(obj)
+			fmt.Printf("\n=====\nDeleted: %v\n\n", obj)
+		},
+	})
+
+	// Start the informer
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	go informer.Run(stopCh)
+
+	// Wait for the cache to sync
+	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
+		fmt.Printf("Error waiting for cache to sync")
+	}
+
+	// Retrieve previous versions from the cache
+	namespace := "default"
+	name := "sample-prometheus-instance"
+	key := fmt.Sprintf("%s/%s", namespace, name)
+
+	for {
+		obj, exists, err := store.GetByKey(key)
+		if err != nil {
+			fmt.Printf("Error getting object from cache: %v", err)
+		}
+		if exists {
+			fmt.Printf("Object: %v\n", obj)
+		} else {
+			fmt.Println("Object not found in cache")
 		}
 	}
 }

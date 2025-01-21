@@ -47,9 +47,9 @@ WORKDIR /k8s
 # Mariner images doesn't support TSan which is the required for go test -race.
 RUN if echo "${BUILD_BASE_IMAGE}" | grep "mariner"; then \
         export SKIP_RACE_CHECK=true; \
-        CGO_ENABLED=1 mage generate operatorTest; \
+        CGO_ENABLED=1 mage generate; \
     else \
-        CGO_ENABLED=1 mage generate operatorTest; \
+        CGO_ENABLED=1 mage generate; \
     fi
 
 # Install gofail
