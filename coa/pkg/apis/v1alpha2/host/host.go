@@ -201,7 +201,8 @@ func (h *APIHost) Launch(config HostConfig,
 			return v1alpha2.NewCOAError(nil, fmt.Sprintf("no vendor factories can provide vendor type '%s'", v.Type), v1alpha2.BadConfig)
 		}
 	}
-	time.Sleep(10 * time.Second)
+	log.Info("--- going to sleep ---")
+	time.Sleep(20 * time.Second)
 	if len(h.Vendors) == 0 {
 		return v1alpha2.NewCOAError(nil, "no vendors are found", v1alpha2.MissingConfig)
 	}
