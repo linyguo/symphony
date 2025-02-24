@@ -103,7 +103,7 @@ func (c *SolutionContainersVendor) onSolutionContainers(request v1alpha2.COARequ
 		if err != nil {
 			scLog.ErrorfCtx(ctx, "V (SolutionContainers): onSolutionContainers failed - %s", err.Error())
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}
@@ -142,7 +142,7 @@ func (c *SolutionContainersVendor) onSolutionContainers(request v1alpha2.COARequ
 		if err != nil {
 			scLog.ErrorfCtx(ctx, "V (SolutionContainers): onSolutionContainers failed - %s", err.Error())
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}
@@ -156,7 +156,7 @@ func (c *SolutionContainersVendor) onSolutionContainers(request v1alpha2.COARequ
 		if err != nil {
 			scLog.ErrorfCtx(ctx, "V (SolutionContainers): onSolutionContainers failed - %s", err.Error())
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}

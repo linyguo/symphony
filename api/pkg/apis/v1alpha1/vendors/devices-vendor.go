@@ -101,7 +101,7 @@ func (c *DevicesVendor) onDevices(request v1alpha2.COARequest) v1alpha2.COARespo
 		if err != nil {
 			log.ErrorfCtx(ctx, "V (Devices): failed to get device spec, error %v", err)
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}
@@ -139,7 +139,7 @@ func (c *DevicesVendor) onDevices(request v1alpha2.COARequest) v1alpha2.COARespo
 		if err != nil {
 			log.ErrorfCtx(ctx, "V (Devices): failed to upsert device spec, error %v", err)
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}
@@ -153,7 +153,7 @@ func (c *DevicesVendor) onDevices(request v1alpha2.COARequest) v1alpha2.COARespo
 		if err != nil {
 			log.ErrorfCtx(ctx, "V (Devices): failed to delete device spec, error %v", err)
 			return observ_utils.CloseSpanWithCOAResponse(span, v1alpha2.COAResponse{
-				State: v1alpha2.InternalError,
+				State: v1alpha2.GetErrorState(err),
 				Body:  []byte(err.Error()),
 			})
 		}
