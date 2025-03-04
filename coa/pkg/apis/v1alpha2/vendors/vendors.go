@@ -61,6 +61,7 @@ type Vendor struct {
 
 func (v *Vendor) SetEvaluationContext(context *utils.EvaluationContext) {
 	v.Context.EvaluationContext = context
+	v.Context.EvaluationContextSet = true
 }
 
 func (v *Vendor) RunLoop(ctx context.Context, interval time.Duration) error {
@@ -96,6 +97,7 @@ func (v *Vendor) Shutdown(ctx context.Context) error {
 func (v *Vendor) Init(config VendorConfig, factories []managers.IManagerFactroy, providers map[string]map[string]providers.IProvider, pubsubProvider pubsub.IPubSubProvider) error {
 	v.Context = &contexts.VendorContext{}
 	v.Context.SiteInfo = config.SiteInfo
+	v.Context.EvaluationContextSet = false
 
 	// see issue #79 - the following needs to be updated to use Symphony expression
 	v.Context.SiteInfo.CurrentSite.BaseUrl = utils.ParseProperty(v.Context.SiteInfo.CurrentSite.BaseUrl)

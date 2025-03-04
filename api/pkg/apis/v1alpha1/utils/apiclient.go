@@ -19,7 +19,9 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/eclipse-symphony/symphony/api/constants"
 	"github.com/eclipse-symphony/symphony/api/pkg/apis/v1alpha1/model"
 	"github.com/eclipse-symphony/symphony/coa/pkg/apis/v1alpha2"
@@ -865,11 +867,24 @@ func (a *apiClient) callRestAPI(ctx context.Context, route string, method string
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
+	// Create and customize the backoff parameters.
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 3 * time.Second // Initial retry interval.
+	b.MaxInterval = 30 * time.Second    // Maximum retry interval.
+	b.MaxElapsedTime = 5 * time.Minute  // Maximum total waiting time.
+	bCtx := backoff.WithContext(b, ctx)
+
 	var resp *http.Response
-	resp, err = a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
+	err = backoff.Retry(func() error {
+		resp, err = a.client.Do(req)
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode >= 500 {
+			return err
+		}
+		return nil
+	}, bCtx)
 
 	defer resp.Body.Close()
 

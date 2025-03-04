@@ -14,10 +14,11 @@ import (
 )
 
 type VendorContext struct {
-	Logger            logger.Logger
-	PubsubProvider    pubsub.IPubSubProvider
-	SiteInfo          v1alpha2.SiteInfo
-	EvaluationContext *utils.EvaluationContext
+	Logger               logger.Logger
+	PubsubProvider       pubsub.IPubSubProvider
+	SiteInfo             v1alpha2.SiteInfo
+	EvaluationContext    *utils.EvaluationContext
+	EvaluationContextSet bool
 }
 
 func (v *VendorContext) Init(p pubsub.IPubSubProvider) error {
