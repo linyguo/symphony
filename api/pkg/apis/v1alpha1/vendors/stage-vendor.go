@@ -188,6 +188,10 @@ func (s *StageVendor) Init(config vendors.VendorConfig, factories []managers.IMa
 				}
 			}
 
+			if s.Context.EvaluationContext == nil {
+				sLog.Errorf("V (Stage): evaluation context is not initalized")
+				return v1alpha2.NewCOAError(nil, "evaluation context is not initalized", v1alpha2.InternalError)
+			}
 			status, activation := s.StageManager.HandleTriggerEvent(ctx, *campaign.Spec, triggerData)
 
 			if triggerData.NeedsReport {
