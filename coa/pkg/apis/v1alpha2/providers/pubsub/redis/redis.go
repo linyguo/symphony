@@ -197,6 +197,9 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 			go i.pollNewMessagesLoop(topic, handler)
 			go i.ClaimMessageLoop(topic, handler)
 			return nil
+		} else {
+			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : waiting for evaluation context to get ready, topic %s with Group %s", topic, handler.Group)
+			time.Sleep(5 * time.Second)
 		}
 	}
 }
