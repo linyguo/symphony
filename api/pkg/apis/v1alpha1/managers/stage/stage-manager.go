@@ -803,6 +803,13 @@ func (s *StageManager) traceValue(ctx context.Context, v interface{}, namespace 
 	switch val := v.(type) {
 	case string:
 		parser := utils.NewParser(val)
+		log.InfofCtx(ctx, " M (Stage): Context: %+v", *s.Context)
+		if s.Context != nil {
+			log.InfofCtx(ctx, " M (Stage): VencorContext: %+v", *s.Context.VencorContext)
+			if s.Context.VencorContext != nil {
+				log.InfofCtx(ctx, " M (Stage): EvaluationContext: %+v", *s.Context.VencorContext.EvaluationContext)
+			}
+		}
 		context := s.Context.VencorContext.EvaluationContext.Clone()
 		context.Context = ctx
 		context.DeploymentSpec = s.Context.VencorContext.EvaluationContext.DeploymentSpec

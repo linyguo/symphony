@@ -261,7 +261,11 @@ func (i *RedisPubSubProvider) ClaimMessageLoop(topic string, handler v1alpha2.Ev
 		case <-i.Ctx.Done():
 			return
 		case <-reclaimTicker.C:
-			i.reclaimPendingMessages(topic, handler)
+			if i.Context.VencorContext.EvaluationContextSet {
+				i.reclaimPendingMessages(topic, handler)
+			} else {
+				mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : waiting for evaluation context to get initialized, topic %s", topic)
+			}
 		}
 	}
 }
