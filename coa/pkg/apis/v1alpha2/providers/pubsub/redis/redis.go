@@ -27,14 +27,15 @@ import (
 var mLog = logger.NewLogger("coa.runtime")
 
 type RedisPubSubProvider struct {
-	Config      RedisPubSubProviderConfig          `json:"config"`
-	Subscribers map[string][]v1alpha2.EventHandler `json:"subscribers"`
-	Client      *redis.Client
-	Ctx         context.Context
-	Cancel      context.CancelFunc
-	Context     *contexts.ManagerContext
-	WorkerLock  *sync.Mutex
-	IdleWorkers int
+	Config       RedisPubSubProviderConfig          `json:"config"`
+	Subscribers  map[string][]v1alpha2.EventHandler `json:"subscribers"`
+	Client       *redis.Client
+	Ctx          context.Context
+	Cancel       context.CancelFunc
+	Context      *contexts.ManagerContext
+	WorkerLock   *sync.Mutex
+	IdleWorkers  int
+	SetupReadyCh chan bool
 }
 
 type RedisMessageWrapper struct {
@@ -142,6 +143,7 @@ func (i *RedisPubSubProvider) Init(config providers.IProviderConfig) error {
 	}
 
 	i.Ctx, i.Cancel = context.WithCancel(context.Background())
+	i.SetupReadyCh = make(chan bool)
 
 	i.Subscribers = make(map[string][]v1alpha2.EventHandler)
 	options := &redis.Options{
@@ -188,9 +190,19 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 		mLog.Errorf("  P (Redis PubSub) : failed to subscribe %v", err)
 		return v1alpha2.NewCOAError(err, fmt.Sprintf("failed to subscribe to topic %s and group %s", topic, handler.Group), v1alpha2.InternalError)
 	}
-	go i.pollNewMessagesLoop(topic, handler)
-	go i.ClaimMessageLoop(topic, handler)
-	return nil
+
+	for {
+		value := <-i.SetupReadyCh
+		if value {
+			go i.pollNewMessagesLoop(topic, handler)
+			go i.ClaimMessageLoop(topic, handler)
+			return nil
+		}
+	}
+}
+
+func (i *RedisPubSubProvider) SendSetupReadyFlag() {
+	i.SetupReadyCh <- true
 }
 
 func (i *RedisPubSubProvider) pollNewMessagesLoop(topic string, handler v1alpha2.EventHandler) {
@@ -261,11 +273,7 @@ func (i *RedisPubSubProvider) ClaimMessageLoop(topic string, handler v1alpha2.Ev
 		case <-i.Ctx.Done():
 			return
 		case <-reclaimTicker.C:
-			if i.Context.VencorContext.EvaluationContextSet {
-				i.reclaimPendingMessages(topic, handler)
-			} else {
-				mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : waiting for evaluation context to get initialized, topic %s", topic)
-			}
+			i.reclaimPendingMessages(topic, handler)
 		}
 	}
 }

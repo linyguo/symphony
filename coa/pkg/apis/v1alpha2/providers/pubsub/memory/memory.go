@@ -26,9 +26,10 @@ const (
 )
 
 type InMemoryPubSubProvider struct {
-	Config      InMemoryPubSubConfig               `json:"config"`
-	Subscribers map[string][]v1alpha2.EventHandler `json:"subscribers"`
-	Context     *contexts.ManagerContext
+	Config       InMemoryPubSubConfig               `json:"config"`
+	Subscribers  map[string][]v1alpha2.EventHandler `json:"subscribers"`
+	Context      *contexts.ManagerContext
+	SetupReadyCh chan bool
 }
 
 type InMemoryPubSubConfig struct {
@@ -97,6 +98,7 @@ func (i *InMemoryPubSubProvider) Init(config providers.IProviderConfig) error {
 		return v1alpha2.NewCOAError(nil, "provided config is not a valid in-memory pub-sub provider config", v1alpha2.BadConfig)
 	}
 	i.Config = vConfig
+	i.SetupReadyCh = make(chan bool)
 	i.Subscribers = make(map[string][]v1alpha2.EventHandler)
 	return nil
 }
@@ -127,6 +129,10 @@ func (i *InMemoryPubSubProvider) Subscribe(topic string, handler v1alpha2.EventH
 	i.Subscribers[topic] = append(i.Subscribers[topic], handler)
 
 	return nil
+}
+
+func (i *InMemoryPubSubProvider) SendSetupReadyFlag() {
+	i.SetupReadyCh <- true
 }
 
 func toInMemoryPubSubConfig(config providers.IProviderConfig) (InMemoryPubSubConfig, error) {
