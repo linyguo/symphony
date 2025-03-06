@@ -223,6 +223,9 @@ func (h *APIHost) Launch(config HostConfig,
 
 	if pubsubProvider != nil {
 		pubsubProvider.(pubsub.IPubSubProvider).SendSetupReadyFlag()
+		log.Infof("--- set ready flag %+v ---", pubsubProvider)
+	} else {
+		log.Infof("--- no pubsubProvider: %v ---", pubsubProvider)
 	}
 
 	var wg sync.WaitGroup
