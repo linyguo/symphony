@@ -143,7 +143,7 @@ func (i *RedisPubSubProvider) Init(config providers.IProviderConfig) error {
 	}
 
 	i.Ctx, i.Cancel = context.WithCancel(context.Background())
-	i.SetupReadyCh = make(chan bool)
+	i.SetupReadyCh = make(chan bool, 1)
 
 	i.Subscribers = make(map[string][]v1alpha2.EventHandler)
 	options := &redis.Options{
@@ -191,17 +191,12 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 		return v1alpha2.NewCOAError(err, fmt.Sprintf("failed to subscribe to topic %s and group %s", topic, handler.Group), v1alpha2.InternalError)
 	}
 
-	for {
-		value := <-i.SetupReadyCh
-		if value {
-			go i.pollNewMessagesLoop(topic, handler)
-			go i.ClaimMessageLoop(topic, handler)
-			return nil
-		} else {
-			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : waiting for evaluation context to get ready, topic %s with Group %s", topic, handler.Group)
-			time.Sleep(5 * time.Second)
-		}
-	}
+	go func() {
+		<-i.SetupReadyCh
+		go i.pollNewMessagesLoop(topic, handler)
+		go i.ClaimMessageLoop(topic, handler)
+	}()
+	return nil
 }
 
 func (i *RedisPubSubProvider) SendSetupReadyFlag() {
