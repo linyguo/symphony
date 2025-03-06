@@ -194,15 +194,15 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 	go func() {
 		mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : check initialize status topic %s with Group %s", topic, handler.Group)
 		for {
-			i.readyFlagLock.Lock()
+			i.readyFlagLock.RLock()
 			if i.readyFlag {
-				i.readyFlagLock.Unlock()
+				i.readyFlagLock.RUnlock()
 				mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : start poll message, topic %s with Group %s", topic, handler.Group)
 				go i.pollNewMessagesLoop(topic, handler)
 				go i.ClaimMessageLoop(topic, handler)
 				return
 			}
-			i.readyFlagLock.Unlock()
+			i.readyFlagLock.RUnlock()
 			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : status not ready topic %s with Group %s", topic, handler.Group)
 			time.Sleep(1 * time.Second)
 		}
