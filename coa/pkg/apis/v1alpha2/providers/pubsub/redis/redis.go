@@ -204,7 +204,7 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 			}
 			i.rwLock.RUnlock()
 			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : status not ready topic %s with Group %s", topic, handler.Group)
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}()
 	return nil
