@@ -9,6 +9,7 @@ package memory
 import (
 	"encoding/json"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/eclipse-symphony/symphony/coa/pkg/apis/v1alpha2"
@@ -30,6 +31,8 @@ type InMemoryPubSubProvider struct {
 	Subscribers  map[string][]v1alpha2.EventHandler `json:"subscribers"`
 	Context      *contexts.ManagerContext
 	SetupReadyCh chan bool
+	rwLock       sync.RWMutex
+	readyFlag    bool
 }
 
 type InMemoryPubSubConfig struct {
@@ -132,7 +135,9 @@ func (i *InMemoryPubSubProvider) Subscribe(topic string, handler v1alpha2.EventH
 }
 
 func (i *InMemoryPubSubProvider) SendSetupReadyFlag() {
-	i.SetupReadyCh <- true
+	i.rwLock.Lock()
+	defer i.rwLock.Unlock()
+	i.readyFlag = true
 }
 
 func toInMemoryPubSubConfig(config providers.IProviderConfig) (InMemoryPubSubConfig, error) {

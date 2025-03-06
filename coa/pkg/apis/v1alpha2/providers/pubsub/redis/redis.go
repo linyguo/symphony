@@ -27,15 +27,16 @@ import (
 var mLog = logger.NewLogger("coa.runtime")
 
 type RedisPubSubProvider struct {
-	Config       RedisPubSubProviderConfig          `json:"config"`
-	Subscribers  map[string][]v1alpha2.EventHandler `json:"subscribers"`
-	Client       *redis.Client
-	Ctx          context.Context
-	Cancel       context.CancelFunc
-	Context      *contexts.ManagerContext
-	WorkerLock   *sync.Mutex
-	IdleWorkers  int
-	SetupReadyCh chan bool
+	Config      RedisPubSubProviderConfig          `json:"config"`
+	Subscribers map[string][]v1alpha2.EventHandler `json:"subscribers"`
+	Client      *redis.Client
+	Ctx         context.Context
+	Cancel      context.CancelFunc
+	Context     *contexts.ManagerContext
+	WorkerLock  *sync.Mutex
+	IdleWorkers int
+	rwLock      sync.RWMutex
+	readyFlag   bool
 }
 
 type RedisMessageWrapper struct {
@@ -143,7 +144,6 @@ func (i *RedisPubSubProvider) Init(config providers.IProviderConfig) error {
 	}
 
 	i.Ctx, i.Cancel = context.WithCancel(context.Background())
-	i.SetupReadyCh = make(chan bool, 1)
 
 	i.Subscribers = make(map[string][]v1alpha2.EventHandler)
 	options := &redis.Options{
@@ -192,15 +192,28 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 	}
 
 	go func() {
-		<-i.SetupReadyCh
-		go i.pollNewMessagesLoop(topic, handler)
-		go i.ClaimMessageLoop(topic, handler)
+		mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : check initialize status topic %s with Group %s", topic, handler.Group)
+		for {
+			i.rwLock.RLock()
+			if i.readyFlag {
+				i.rwLock.RUnlock()
+				mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : start poll message, topic %s with Group %s", topic, handler.Group)
+				go i.pollNewMessagesLoop(topic, handler)
+				go i.ClaimMessageLoop(topic, handler)
+				return
+			}
+			i.rwLock.RUnlock()
+			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : status not ready topic %s with Group %s", topic, handler.Group)
+			time.Sleep(5 * time.Second)
+		}
 	}()
 	return nil
 }
 
-func (i *RedisPubSubProvider) SendSetupReadyFlag() {
-	i.SetupReadyCh <- true
+func (i *RedisPubSubProvider) SendReadyFlag() {
+	i.rwLock.Lock()
+	defer i.rwLock.Unlock()
+	i.readyFlag = true
 }
 
 func (i *RedisPubSubProvider) pollNewMessagesLoop(topic string, handler v1alpha2.EventHandler) {
