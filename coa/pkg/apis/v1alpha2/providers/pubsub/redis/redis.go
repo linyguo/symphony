@@ -27,16 +27,16 @@ import (
 var mLog = logger.NewLogger("coa.runtime")
 
 type RedisPubSubProvider struct {
-	Config      RedisPubSubProviderConfig          `json:"config"`
-	Subscribers map[string][]v1alpha2.EventHandler `json:"subscribers"`
-	Client      *redis.Client
-	Ctx         context.Context
-	Cancel      context.CancelFunc
-	Context     *contexts.ManagerContext
-	WorkerLock  *sync.Mutex
-	IdleWorkers int
-	rwLock      sync.RWMutex
-	readyFlag   bool
+	Config        RedisPubSubProviderConfig          `json:"config"`
+	Subscribers   map[string][]v1alpha2.EventHandler `json:"subscribers"`
+	Client        *redis.Client
+	Ctx           context.Context
+	Cancel        context.CancelFunc
+	Context       *contexts.ManagerContext
+	WorkerLock    *sync.Mutex
+	IdleWorkers   int
+	readyFlagLock sync.RWMutex
+	readyFlag     bool
 }
 
 type RedisMessageWrapper struct {
@@ -194,15 +194,15 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 	go func() {
 		mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : check initialize status topic %s with Group %s", topic, handler.Group)
 		for {
-			i.rwLock.RLock()
+			i.readyFlagLock.Lock()
 			if i.readyFlag {
-				i.rwLock.RUnlock()
+				i.readyFlagLock.Unlock()
 				mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : start poll message, topic %s with Group %s", topic, handler.Group)
 				go i.pollNewMessagesLoop(topic, handler)
 				go i.ClaimMessageLoop(topic, handler)
 				return
 			}
-			i.rwLock.RUnlock()
+			i.readyFlagLock.Unlock()
 			mLog.InfofCtx(i.Ctx, "  P (Redis PubSub) : status not ready topic %s with Group %s", topic, handler.Group)
 			time.Sleep(1 * time.Second)
 		}
@@ -210,9 +210,9 @@ func (i *RedisPubSubProvider) Subscribe(topic string, handler v1alpha2.EventHand
 	return nil
 }
 
-func (i *RedisPubSubProvider) SendReadyFlag() {
-	i.rwLock.Lock()
-	defer i.rwLock.Unlock()
+func (i *RedisPubSubProvider) SendSetupReadyFlag() {
+	i.readyFlagLock.Lock()
+	defer i.readyFlagLock.Unlock()
 	i.readyFlag = true
 }
 
