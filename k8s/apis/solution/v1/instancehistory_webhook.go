@@ -89,7 +89,7 @@ func (r *InstanceHistory) Default() {
 	r.ObjectMeta.SetAnnotations(annotations)
 }
 
-//+kubebuilder:webhook:path=/validate-solution-symphony-v1-instancehistory,mutating=false,failurePolicy=fail,sideEffects=None,groups=solution.symphony,resources=instancehistories,verbs=create;update;delete,versions=v1,name=vinstancehistory.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-solution-symphony-v1-instancehistory,mutating=false,failurePolicy=fail,sideEffects=None,groups=solution.symphony,resources=instancehistories;instancehistories.status,verbs=create;update;delete,versions=v1,name=vinstancehistory.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &InstanceHistory{}
 
@@ -113,6 +113,7 @@ func (r *InstanceHistory) ValidateUpdate(old runtime.Object) (admission.Warnings
 
 	// instance history spec is readonly and should not be updated
 	oldInstanceHistory, ok := old.(*InstanceHistory)
+	diagnostic.InfoWithCtx(historyLog, ctx, "Update instance history validation", "name", r.Name, "namespace", r.Namespace, "old", oldInstanceHistory, "new", r)
 	if !ok {
 		err := fmt.Errorf("expected an Instance History object")
 		diagnostic.ErrorWithCtx(historyLog, ctx, err, "failed to convert old object to Instance History", "name", r.Name, "namespace", r.Namespace)
@@ -120,12 +121,12 @@ func (r *InstanceHistory) ValidateUpdate(old runtime.Object) (admission.Warnings
 	}
 	if !r.Spec.DeepEquals(oldInstanceHistory.Spec) {
 		err := fmt.Errorf("Cannot update instance history spec because it is readonly")
-		diagnostic.ErrorWithCtx(historyLog, ctx, err, "Instance history is readonly", "name", r.Name, "namespace", r.Namespace)
+		diagnostic.ErrorWithCtx(historyLog, ctx, err, "Instance history spec is readonly", "name", r.Name, "namespace", r.Namespace)
 		return nil, err
 	}
 	if !r.Status.DeepEquals(oldInstanceHistory.Status) {
 		err := fmt.Errorf("Cannot update instance history status because it is readonly")
-		diagnostic.ErrorWithCtx(historyLog, ctx, err, "Instance history is readonly", "name", r.Name, "namespace", r.Namespace)
+		diagnostic.ErrorWithCtx(historyLog, ctx, err, "Instance history status is readonly", "name", r.Name, "namespace", r.Namespace)
 		return nil, err
 	}
 	return nil, nil

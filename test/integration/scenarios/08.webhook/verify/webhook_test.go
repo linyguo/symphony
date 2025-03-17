@@ -7,6 +7,7 @@
 package verify
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,8 +17,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eclipse-symphony/symphony/test/integration/lib/testhelpers"
 	"github.com/princjef/mageutil/shellcmd"
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 var (
@@ -404,8 +410,53 @@ func TestUpdateInstanceHistory(t *testing.T) {
 	err := shellcmd.Command(fmt.Sprintf("kubectl apply -f %s", path.Join(getRepoPath(), historyCreate))).Run()
 	assert.Nil(t, err)
 	output, err := exec.Command("kubectl", "apply", "-f", path.Join(getRepoPath(), historyUpdate)).CombinedOutput()
-	assert.NotNil(t, err)
+	assert.NotNil(t, err, "instance history update spec should fail")
 	assert.True(t, strings.Contains(string(output), "Cannot update instance history spec because it is readonly"))
+
+	ctx := context.Background()
+	config, err := testhelpers.RestConfig()
+	if err != nil {
+		panic(err)
+	}
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		panic(err)
+	}
+
+	resourceId := schema.GroupVersionResource{
+		Group:    "solution.symphony",
+		Version:  "v1",
+		Resource: "instancehistories",
+	}
+	historyId := "history-instance-v-20250226053843"
+	item, err := dynamicClient.Resource(resourceId).Namespace("default").Get(ctx, historyId, v1.GetOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	status := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "solution.symphony/v1",
+			"kind":       "Status",
+			"metadata": map[string]interface{}{
+				"name": historyId,
+			},
+			"status": map[string]interface{}{
+				"lastModified": "2025-02-26T09:57:27Z",
+				"properties": map[string]interface{}{
+					"status": "Succeeded",
+				},
+				"provisioningStatus": map[string]interface{}{
+					"status":      "",
+					"operationId": "",
+				},
+			},
+		},
+	}
+	status.SetResourceVersion(item.GetResourceVersion())
+
+	_, err = dynamicClient.Resource(resourceId).Namespace("default").UpdateStatus(ctx, status, v1.UpdateOptions{})
+	assert.NotNil(t, err, "instance history update status should fail")
 }
 
 func getRepoPath() string {

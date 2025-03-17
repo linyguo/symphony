@@ -3392,6 +3392,7 @@ webhooks:
     - DELETE
     resources:
     - instancehistories
+    - instancehistories.status
   sideEffects: None
 - admissionReviewVersions:
   - v1
