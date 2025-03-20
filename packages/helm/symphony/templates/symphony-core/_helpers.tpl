@@ -240,7 +240,12 @@ Symphony full url Endpoint
 {{- else if $existingPVC  }}
 {{- $existingPVC.spec.storageClassName -}}
 {{- else }}
-{{- .Values.redis.persistentVolume.storageClass -}}
+{{- $scitems := (lookup "storage.k8s.io/v1" "StorageClass" .Release.Namespace "").items }}
+{{- if not $scitems }}
+{{- fail (printf "Error: no StorageClass found. Please create a storage class it before installing.")}}
+{{- end  }}
+{{- $firstItem := index $scitems 0 -}}
+{{- $firstItem.metadata.name -}}
 {{- end -}}
 {{- end -}}
 
