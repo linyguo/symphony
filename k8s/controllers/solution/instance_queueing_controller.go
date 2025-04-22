@@ -144,7 +144,7 @@ func (r *InstanceQueueingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	recoverPanic := false
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("InstanceQueueing").
-		WithOptions((controller.Options{RecoverPanic: &recoverPanic})).
+		WithOptions((controller.Options{RecoverPanic: &recoverPanic, MaxConcurrentReconciles: r.QueueingConcurrentReconciles})).
 		For(&solution_v1.Instance{}).
 		WithEventFilter(predicate.Or(generationChange, operationIdPredicate)).
 		Watches(new(solution_v1.Solution), handler.EnqueueRequestsFromMapFunc(

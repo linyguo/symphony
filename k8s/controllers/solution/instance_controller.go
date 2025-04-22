@@ -52,6 +52,9 @@ type InstanceReconciler struct {
 	// PollingConcurrentReconciles defines the number of concurrent reconciles
 	PollingConcurrentReconciles int
 
+	// QueueingConcurrentReconciles defines the number of concurrent reconciles
+	QueueingConcurrentReconciles int
+
 	// Controller metrics
 	m *metrics.Metrics
 

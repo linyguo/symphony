@@ -128,6 +128,7 @@ func main() {
 	var pollIntervalString string
 	var reconcileIntervalString string
 	var pollingConcurrentReconciles int
+	var queueingConcurrentReconciles int
 	var deleteTimeOutString string
 	var metricsConfigFile string
 	var logsConfigFile string
@@ -145,7 +146,8 @@ func main() {
 	flag.BoolVar(&disableWebhooksServer, "disable-webhooks-server", false, "Whether to disable webhooks server endpoints. ")
 	flag.StringVar(&pollIntervalString, "poll-interval", "2s", "The interval in seconds to poll the target and instance status during reconciliation.")
 	flag.StringVar(&reconcileIntervalString, "reconcile-interval", "30m", "The interval in seconds to reconcile the target and instance status.")
-	flag.IntVar(&pollingConcurrentReconciles, "polling-concurrent-reconciles", 5, "The number of concurrent reconciles.")
+	flag.IntVar(&pollingConcurrentReconciles, "polling-concurrent-reconciles", 5, "The number of concurrent reconciles for polling.")
+	flag.IntVar(&queueingConcurrentReconciles, "queueing-concurrent-reconciles", 5, "The number of concurrent reconciles for queueing.")
 	// Honor OSS changes: use 1m instead of 5m for delete-timeout
 	flag.StringVar(&deleteTimeOutString, "delete-timeout", "30m", "The timeout in seconds to wait for the target and instance deletion.")
 	// Add new settings for delete sync delay
@@ -304,13 +306,14 @@ func main() {
 	}
 	if err = (&solutioncontrollers.InstanceQueueingReconciler{
 		InstanceReconciler: solutioncontrollers.InstanceReconciler{
-			Client:                 mgr.GetClient(),
-			Scheme:                 mgr.GetScheme(),
-			ReconciliationInterval: reconcileInterval,
-			DeleteTimeOut:          deleteTimeOut,
-			PollInterval:           pollInterval,
-			DeleteSyncDelay:        deleteSyncDelay,
-			ApiClient:              apiClient,
+			Client:                       mgr.GetClient(),
+			Scheme:                       mgr.GetScheme(),
+			ReconciliationInterval:       reconcileInterval,
+			DeleteTimeOut:                deleteTimeOut,
+			PollInterval:                 pollInterval,
+			QueueingConcurrentReconciles: queueingConcurrentReconciles,
+			DeleteSyncDelay:              deleteSyncDelay,
+			ApiClient:                    apiClient,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create instance queueing controller", "controller", "Instance")
@@ -350,13 +353,14 @@ func main() {
 	}
 	if err = (&fabriccontrollers.TargetQueueingReconciler{
 		TargetReconciler: fabriccontrollers.TargetReconciler{
-			Client:                 mgr.GetClient(),
-			Scheme:                 mgr.GetScheme(),
-			ReconciliationInterval: reconcileInterval,
-			DeleteTimeOut:          deleteTimeOut,
-			PollInterval:           pollInterval,
-			DeleteSyncDelay:        deleteSyncDelay,
-			ApiClient:              apiClient,
+			Client:                       mgr.GetClient(),
+			Scheme:                       mgr.GetScheme(),
+			ReconciliationInterval:       reconcileInterval,
+			DeleteTimeOut:                deleteTimeOut,
+			PollInterval:                 pollInterval,
+			QueueingConcurrentReconciles: queueingConcurrentReconciles,
+			DeleteSyncDelay:              deleteSyncDelay,
+			ApiClient:                    apiClient,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create target queueing controller", "controller", "Target")

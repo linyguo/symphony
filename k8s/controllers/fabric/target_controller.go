@@ -46,6 +46,9 @@ type TargetReconciler struct {
 	// PollingConcurrentReconciles defines the number of concurrent reconciles
 	PollingConcurrentReconciles int
 
+	// QueueingConcurrentReconciles defines the number of concurrent reconciles
+	QueueingConcurrentReconciles int
+
 	// Controller Metrics
 	m *metrics.Metrics
 

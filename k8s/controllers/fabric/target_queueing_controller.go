@@ -135,7 +135,7 @@ func (r *TargetQueueingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	recoverPanic := false
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("TargetQueueing").
-		WithOptions((controller.Options{RecoverPanic: &recoverPanic})).
+		WithOptions((controller.Options{RecoverPanic: &recoverPanic, MaxConcurrentReconciles: r.QueueingConcurrentReconciles})).
 		WithEventFilter(predicate.Or(genChangePredicate, operationIdPredicate)).
 		For(&symphonyv1.Target{}).
 		Complete(r)
