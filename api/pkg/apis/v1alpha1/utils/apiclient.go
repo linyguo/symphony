@@ -832,7 +832,17 @@ func (a *apiClient) SendVisualizationPacket(ctx context.Context, payload []byte,
 	return nil
 }
 
+// Wraps the call to the REST API with a default backoff strategy
 func (a *apiClient) callRestAPI(ctx context.Context, route string, method string, payload []byte, token string) ([]byte, error) {
+	// prvide a default backoff strategy
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 2 * time.Second // Initial retry interval.
+	b.MaxInterval = 30 * time.Second    // Maximum retry interval.
+	b.MaxElapsedTime = 5 * time.Minute  // Maximum total waiting time.
+	return a.callRestAPIWithBackoff(ctx, route, method, payload, token, b)
+}
+
+func (a *apiClient) callRestAPIWithBackoff(ctx context.Context, route string, method string, payload []byte, token string, b *backoff.ExponentialBackOff) ([]byte, error) {
 	urlString := fmt.Sprintf("%s%s", a.baseUrl, path.Clean(route))
 	ctx, span := observability.StartSpan("Symphony-API-Client", ctx, &map[string]string{
 		"method":      "callRestAPI",
@@ -870,11 +880,6 @@ func (a *apiClient) callRestAPI(ctx context.Context, route string, method string
 	var resp *http.Response
 	var userError error
 	var bodyBytes []byte
-
-	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = 2 * time.Second // Initial retry interval.
-	b.MaxInterval = 30 * time.Second    // Maximum retry interval.
-	b.MaxElapsedTime = 5 * time.Minute  // Maximum total waiting time.
 
 	retryErr := backoff.Retry(func() error {
 		resp, err = a.client.Do(req)
