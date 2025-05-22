@@ -18,7 +18,7 @@ else
     formatted="[]"
 fi
 
-messageContent="{\"Success\": $successsFlag, \"Message\": \"$message\", \"StagedImages\": $formatted}"
+messageContent="{\\\"Success\\\": $successsFlag, \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": $formatted}"
 output_results=$(cat <<EOF
 {
   "staging-status": {
