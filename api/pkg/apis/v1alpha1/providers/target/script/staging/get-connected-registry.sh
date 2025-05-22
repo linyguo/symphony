@@ -59,7 +59,7 @@ echo "Service IP: $serviceIp"
 messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
 output_results='{}
   "component": {
-    "status": 9998,
+    "status": 8001,
     "message": "$messageContent"
   }
 }'
