@@ -14,7 +14,7 @@ images="[]"
 messageContent="{\\\"Success\\\": \\\"$successsFlag\\\", \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": \\\"$images\\\"}"
 output_results=$(cat <<EOF
 {
-  "connection-string": {
+  "staging-status": {
     "status": 8004,
     "message": "$messageContent"
   }
