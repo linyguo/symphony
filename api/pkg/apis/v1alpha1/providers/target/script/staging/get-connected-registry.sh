@@ -55,20 +55,8 @@ echo "Connected registry name: $connectedRegistryName"
 echo "ACR name: $acrName"
 echo "Service IP: $serviceIp"
 
-messageContent=$(cat <<EOF
-{"RegistryName": "$acrName", "ConnectedRegistryName": "$connectedRegistryName", "ServiceIp": "$serviceIp"}
-EOF
-)
-
-output_results=$(cat <<EOF
-{
-    "component": {
-        "status": 8004,
-        "message": "$messageContent"
-    }
-}
-EOF
-)
+messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryName\\\": \\\"$connectedRegistryName\\\", \\\"ServiceIp\\\": \\\"$serviceIp\\\"}"
+output_results="{\"component\": {\"status\": 8004, \"message\": \"$messageContent\"}}"
 
 echo "$output_results"
 echo "$output_results" > ${deployment%.*}-output.${deployment##*.}
