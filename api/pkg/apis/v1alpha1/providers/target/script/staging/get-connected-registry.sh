@@ -55,11 +55,11 @@ echo "Connected registry name: $connectedRegistryName"
 echo "ACR name: $acrName"
 echo "Service IP: $serviceIp"
 
-# messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryName\\\": \\\"$connectedRegistryName\\\", \\\"ServiceIp\\\": \\\"$serviceIp\\\"}"
-messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
+messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryName\\\": \\\"$connectedRegistryName\\\", \\\"ServiceIp\\\": \\\"$serviceIp\\\"}"
+# messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
 output_results=$(cat <<EOF
 {
-  "component1": {
+  "connected-registry-monitor": {
     "status": 8004,
     "message": "$messageContent"
   }
