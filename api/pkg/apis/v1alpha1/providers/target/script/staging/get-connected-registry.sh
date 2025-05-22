@@ -57,13 +57,9 @@ echo "Service IP: $serviceIp"
 
 # messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryName\\\": \\\"$connectedRegistryName\\\", \\\"ServiceIp\\\": \\\"$serviceIp\\\"}"
 messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
-output_results='{}
+output_results='{
   "component1": {
-    "status": 8001,
-    "message": "$messageContent"
-  },
-  "component2": {
-    "status": 8001,
+    "status": 8004,
     "message": "$messageContent"
   }
 }'
