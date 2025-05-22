@@ -60,9 +60,10 @@ messageContent="succeeded to get connected registry: $connectedRegistryName, ACR
 output_results='{
   "component1": {
     "status": 8004,
-    "message": "$messageContent"
+    "message": "${messageContent}"
   }
 }'
 
 echo "$output_results"
+echo "output file ${deployment%.*}-output.${deployment##*.}"
 echo "$output_results" > ${deployment%.*}-output.${deployment##*.}
