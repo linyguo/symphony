@@ -23,7 +23,7 @@ json=$(jq -n \
   --argjson Success "$successsFlag" \
   --arg Message "$message" \
   --argjson Images "$images_json" \
-  '{Success: $Success, Message: $Message, Images: $Images}'
+  '{Success: $Success, Message: $Message, StagedImages: $Images}'
 )
 encoded=$(jq -cn --argjson obj "$json" '$obj | @json')
 
@@ -31,7 +31,7 @@ output_results=$(cat <<EOF
 {
   "staging-status": {
     "status": 8004,
-    "message": "$encoded"
+    "message": $encoded
   }
 }
 EOF
