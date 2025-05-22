@@ -64,7 +64,7 @@ output_results=$(cat <<EOF
 {
     "component": {
         "status": 8004,
-        "message": $messageContent
+        "message": "$messageContent"
     }
 }
 EOF
