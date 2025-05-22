@@ -11,12 +11,19 @@ successsFlag=true
 message=""
 images=()
 
-messageContent="{\\\"Success\\\": \\\"$successsFlag\\\", \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": \\\"$images\\\"}"
+if [ ${#images[@]} -gt 0 ]; then
+    formatted=$(printf '"%s", ' "${images[@]}")
+    formatted="[${formatted%, }]"
+else
+    formatted="[]"
+fi
+
+messageContent="{\\\"Success\\\": $successsFlag, \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": $formatted}"
 output_results=$(cat <<EOF
 {
   "staging-status": {
     "status": 8004,
-    "message": "$messageContent"
+    "message": $messageContent
   }
 }
 EOF
