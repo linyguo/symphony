@@ -59,7 +59,7 @@ messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryNa
 # messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
 output_results=$(cat <<EOF
 {
-  "connected-registry-monitor": {
+  "connection-string": {
     "status": 8004,
     "message": "$messageContent"
   }
