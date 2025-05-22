@@ -9,7 +9,7 @@ sleep 5
 
 successsFlag=true
 message=""
-images="[]"
+images=()
 
 messageContent="{\\\"Success\\\": \\\"$successsFlag\\\", \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": \\\"$images\\\"}"
 output_results=$(cat <<EOF
