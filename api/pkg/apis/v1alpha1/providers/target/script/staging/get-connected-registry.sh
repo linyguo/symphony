@@ -57,12 +57,15 @@ echo "Service IP: $serviceIp"
 
 # messageContent="{\\\"RegistryName\\\": \\\"$acrName\\\", \\\"ConnectedRegistryName\\\": \\\"$connectedRegistryName\\\", \\\"ServiceIp\\\": \\\"$serviceIp\\\"}"
 messageContent="succeeded to get connected registry: $connectedRegistryName, ACR name: $acrName, Service IP: $serviceIp"
-output_results='{
+output_results=$(cat <<EOF
+{
   "component1": {
     "status": 8004,
-    "message": "${messageContent}"
+    "message": "$messageContent"
   }
-}'
+}
+EOF
+)
 
 echo "$output_results"
 echo "output file ${deployment%.*}-output.${deployment##*.}"
