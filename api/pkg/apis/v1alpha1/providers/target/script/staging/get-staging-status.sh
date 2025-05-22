@@ -11,19 +11,27 @@ successsFlag=true
 message=""
 images=()
 
-if [ ${#images[@]} -gt 0 ]; then
-    formatted=$(printf '"%s", ' "${images[@]}")
-    formatted="[${formatted%, }]"
+# Handle empty array case explicitly
+if [ "${#images[@]}" -eq 0 ]; then
+  images_json="[]"
 else
-    formatted="[]"
+  images_json=$(printf '%s\n' "${images[@]}" | jq -R . | jq -s .)
 fi
+ 
+# Now build the final JSON
+json=$(jq -n \
+  --argjson Success "$successsFlag" \
+  --arg Message "$message" \
+  --argjson Images "$images_json" \
+  '{Success: $Success, Message: $Message, Images: $Images}'
+)
+encoded=$(jq -cn --argjson obj "$json" '$obj | @json')
 
-messageContent="{\\\"Success\\\": $successsFlag, \\\"Message\\\": \\\"$message\\\", \\\"StagedImages\\\": $formatted}"
 output_results=$(cat <<EOF
 {
   "staging-status": {
     "status": 8004,
-    "message": "$messageContent"
+    "message": "$encoded"
   }
 }
 EOF
