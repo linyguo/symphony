@@ -323,7 +323,7 @@ echo "Downloaded images: count: ${#downloaded_images[@]}"
 
 if [ ${#downloaded_images[@]} -ne ${#image_args[@]} ]; then
   successFlag=false
-  message="No images were fully downloaded, requested images: ${#image_args[@]}, fully downloaded: ${#downloaded_images[@]}."
+  message="Not all images were fully downloaded, requested images: ${#image_args[@]}, fully downloaded: ${#downloaded_images[@]}."
 else
   message="Successfully checked the download status of images. Total images checked: ${#image_args[@]}, fully downloaded: ${#downloaded_images[@]}."
 fi
